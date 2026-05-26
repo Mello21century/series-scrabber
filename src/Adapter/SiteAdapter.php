@@ -19,7 +19,11 @@ abstract class SiteAdapter
 
     abstract public function cdnHeaders(): array;
 
-    abstract public function capturePlaylistUrl(RemoteWebDriver $driver, string $url, int $waitSeconds = 10): ?string;
+    /**
+     * Capture the stream source for an episode page.
+     * @return ?array{type: 'hls'|'mp4', url: string}
+     */
+    abstract public function captureSource(RemoteWebDriver $driver, string $url, int $waitSeconds = 15): ?array;
 
     /**
      * @return array<int,int> season => episodeCount

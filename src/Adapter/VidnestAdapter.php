@@ -29,7 +29,7 @@ class VidnestAdapter extends SiteAdapter
         ];
     }
 
-    public function capturePlaylistUrl(RemoteWebDriver $driver, string $url, int $waitSeconds = 10): ?string
+    public function captureSource(RemoteWebDriver $driver, string $url, int $waitSeconds = 15): ?array
     {
         $driver->manage()->getLog('performance');
         $driver->get($url);
@@ -49,8 +49,14 @@ class VidnestAdapter extends SiteAdapter
                 $reqUrl = $msg['message']['params']['request']['url']
                     ?? $msg['message']['params']['response']['url']
                     ?? null;
-                if (is_string($reqUrl) && preg_match('/\.txt(\?|$)/i', $reqUrl)) {
-                    return $reqUrl;
+                if (!is_string($reqUrl)) {
+                    continue;
+                }
+                if (preg_match('/\.txt(\?|$)/i', $reqUrl)) {
+                    return ['type' => 'hls', 'url' => $reqUrl];
+                }
+                if (str_contains($reqUrl, '/mp4-proxy?url=')) {
+                    return ['type' => 'mp4', 'url' => $reqUrl];
                 }
             }
             usleep(500_000);

@@ -87,18 +87,24 @@ class Downloader
 
         try {
             $pageUrl = $this->adapter->episodeUrl($season, $ep);
-            $playlistUrl = $this->adapter->capturePlaylistUrl($driver, $pageUrl);
+            $source = $this->adapter->captureSource($driver, $pageUrl);
         } finally {
             if ($ownDriver) {
                 $driver->quit();
             }
         }
 
-        if ($playlistUrl === null) {
-            return ['ok' => false, 'error' => 'no playlist URL captured'];
+        if ($source === null) {
+            return ['ok' => false, 'error' => 'no stream source captured'];
         }
 
         $headers = $this->adapter->cdnHeaders();
+
+        if (($source['type'] ?? 'hls') === 'mp4') {
+            return $this->prepareMp4($source['url'], $tempDir, $manifestPath, $headers);
+        }
+
+        $playlistUrl = $source['url'];
         $playlist = getCdn($playlistUrl, $headers);
         if ($playlist === false || $playlist === '') {
             return ['ok' => false, 'error' => 'playlist download failed'];
@@ -216,12 +222,74 @@ class Downloader
         if (file_exists($path) && filesize($path) > 0) {
             return ['ok' => true, 'segIdx' => $segIdx, 'total' => $total, 'cached' => true];
         }
-        $bytes = getCdn($seg['url'], $this->adapter->cdnHeaders());
+
+        $type = $manifest['type'] ?? 'hls';
+        $headers = $this->adapter->cdnHeaders();
+
+        if ($type === 'mp4') {
+            $sourceUrl = $manifest['sourceUrl'];
+            if (isset($seg['range'])) {
+                $headers[] = 'Range: bytes=' . $seg['range'][0] . '-' . $seg['range'][1];
+            }
+            $bytes = getCdn($sourceUrl, $headers);
+        } else {
+            $bytes = getCdn($seg['url'], $headers);
+        }
+
         if ($bytes === false || $bytes === '') {
             return ['ok' => false, 'error' => "segment $segIdx download failed", 'segIdx' => $segIdx, 'total' => $total];
         }
         file_put_contents($path, $bytes);
         return ['ok' => true, 'segIdx' => $segIdx, 'total' => $total, 'done' => $segIdx + 1 === $total];
+    }
+
+    private function prepareMp4(string $sourceUrl, string $tempDir, string $manifestPath, array $headers): array
+    {
+        $size = $this->probeSize($sourceUrl, $headers);
+        $chunk = 4 * 1024 * 1024;
+        $segments = [];
+        if ($size > 0) {
+            $total = (int) max(1, ceil($size / $chunk));
+            for ($i = 0; $i < $total; $i++) {
+                $start = $i * $chunk;
+                $end = min($start + $chunk - 1, $size - 1);
+                $segments[] = [
+                    'local' => sprintf('seg-%05d.bin', $i),
+                    'range' => [$start, $end],
+                ];
+            }
+        } else {
+            // Unknown size — single segment, no Range header.
+            $segments[] = ['local' => 'seg-00000.bin'];
+        }
+
+        $manifest = [
+            'type' => 'mp4',
+            'sourceUrl' => $sourceUrl,
+            'segments' => $segments,
+            'totalSegments' => count($segments),
+            'totalBytes' => $size,
+            'duration' => 0.0,
+        ];
+        file_put_contents($manifestPath, json_encode($manifest, JSON_PRETTY_PRINT));
+        return ['ok' => true, 'manifest' => $manifest];
+    }
+
+    private function probeSize(string $url, array $headers): int
+    {
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $url);
+        curl_setopt($curl, CURLOPT_NOBODY, true);
+        curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_TIMEOUT, 30);
+        curl_exec($curl);
+        $size = (int) curl_getinfo($curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
+        curl_close($curl);
+        return $size > 0 ? $size : 0;
     }
 
     public function finalize(int $season, int $ep): array
@@ -232,8 +300,6 @@ class Downloader
             return ['ok' => false, 'error' => 'manifest missing'];
         }
         $manifest = json_decode((string) file_get_contents($manifestPath), true);
-        $localPlaylist = "$tempDir/index.m3u8";
-        file_put_contents($localPlaylist, implode("\n", $manifest['playlistLines'] ?? []));
 
         $outDir = sprintf('%s/output/s%02d', $this->projectDir, $season);
         @mkdir($outDir, 0775, true);
@@ -243,6 +309,31 @@ class Downloader
         $logFile = "$tempDir/ffmpeg.log";
         @unlink($progressFile);
         @unlink($logFile);
+
+        if (($manifest['type'] ?? 'hls') === 'mp4') {
+            $fh = fopen($outFile, 'wb');
+            if ($fh === false) {
+                return ['ok' => false, 'error' => "cannot open $outFile for writing"];
+            }
+            foreach ($manifest['segments'] as $seg) {
+                $path = "$tempDir/{$seg['local']}";
+                if (!file_exists($path)) {
+                    fclose($fh);
+                    @unlink($outFile);
+                    return ['ok' => false, 'error' => "missing segment {$seg['local']}"];
+                }
+                $sh = fopen($path, 'rb');
+                stream_copy_to_stream($sh, $fh);
+                fclose($sh);
+            }
+            fclose($fh);
+            // Signal "ffmpeg done" so ffmpegStatus reports 100% and cleans up temp.
+            file_put_contents($progressFile, "progress=end\n");
+            return ['ok' => true, 'pid' => 0, 'duration' => 0.0, 'outFile' => $outFile];
+        }
+
+        $localPlaylist = "$tempDir/index.m3u8";
+        file_put_contents($localPlaylist, implode("\n", $manifest['playlistLines'] ?? []));
 
         $cmd = sprintf(
             '%s -y -allowed_extensions ALL -i %s -c copy -progress %s %s > %s 2>&1 & echo $!',
