@@ -1,0 +1,31 @@
+{
+  "name": "mello/scrabber",
+  "autoload": {
+    "psr-4": {
+      "Mello\\Scrabber\\": "src/"
+    },
+    "files": [
+      "src/helpers.php"
+    ]
+  },
+  "authors": [
+    {
+      "name": "Ahmed Safaa",
+      "email": "ahmed@sz4h.com"
+    }
+  ],
+  "require": {
+    "guzzlehttp/guzzle": "^7.0",
+    "symfony/dom-crawler": "^6.3",
+    "symfony/css-selector": "^6.3",
+    "ext-libxml": "*",
+    "ext-curl": "*",
+    "ext-gd": "*",
+    "php-webdriver/webdriver": "^1.15",
+    "ext-json": "*"
+  },
+  "repositories": [
+    {"type": "vcs", "url": "https://github.com/Mello21century/guzzlehttp-cloudflare"},
+    {"type": "vcs", "url": "https://github.com/Mello21century/cloudflare-bypass"}
+  ]
+}

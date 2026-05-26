@@ -1,0 +1,10 @@
+.git
+.idea
+.claude
+.DS_Store
+vendor
+output
+temp
+test.html
+old.php
+*.md

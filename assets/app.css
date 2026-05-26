@@ -1,0 +1,27 @@
+body { font: 14px/1.45 ui-monospace, Menlo, monospace; background: #0b0d10; color: #d6d8da; margin: 0; padding: 24px; }
+h1 { font-size: 16px; margin: 0 0 12px; color: #fff; }
+.season-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.season-label { width: 36px; color: #98a2ad; }
+.cells { display: grid; gap: 4px; }
+.cell { width: 22px; height: 22px; background: #1e2329; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #6c7480; cursor: pointer; user-select: none; }
+.cell:hover { outline: 1px solid #3a86ff; }
+.cell.running { background: #3a86ff; color: #fff; animation: pulse 1s infinite; }
+.cell.ok      { background: #1f8a4c; color: #fff; }
+.cell.fail    { background: #c4302b; color: #fff; }
+.cell.skip    { background: #4a3a1a; color: #d2a04c; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.log { background: #11151a; border: 1px solid #1e2329; border-radius: 4px; padding: 10px; height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; margin-top: 16px; }
+.controls { margin-bottom: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+button { background: #3a86ff; color: #fff; border: 0; padding: 8px 14px; border-radius: 4px; cursor: pointer; font: inherit; }
+button.season-btn { background: #2a3038; padding: 2px 6px; font-size: 10px; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.status { display: inline-block; margin-left: 12px; color: #98a2ad; }
+input { background: #1e2329; color: #d6d8da; border: 1px solid #2a3038; padding: 6px 8px; border-radius: 3px; font: inherit; width: 70px; }
+label { color: #98a2ad; margin-right: 4px; }
+.progress-wrap { margin: 16px 0; display: grid; gap: 8px; }
+.progress-row { display: grid; grid-template-columns: 90px 1fr 60px; gap: 8px; align-items: center; }
+.progress-label { color: #98a2ad; font-size: 12px; }
+.progress-track { background: #11151a; border: 1px solid #1e2329; border-radius: 3px; height: 14px; overflow: hidden; }
+.progress-fill { background: #3a86ff; height: 100%; width: 0; transition: width 120ms linear; }
+.progress-fill.ffmpeg { background: #1f8a4c; }
+.progress-pct { color: #98a2ad; font-size: 12px; text-align: right; }
