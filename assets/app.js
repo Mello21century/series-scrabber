@@ -48,11 +48,25 @@ function setBusy(b) {
     stopBtn.disabled = !b;
 }
 
-async function api(action, params = {}) {
+async function api(action, params = {}, { retries = 3, retryDelayMs = 1000 } = {}) {
     const qs = new URLSearchParams({ action, seriesId: seriesIdInput.value || '155', ...params });
-    const r = await fetch(`actions.php?${qs}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const r = await fetch(`actions.php?${qs}`);
+            if (r.ok) return r.json();
+            if (r.status >= 500 && r.status < 600 && attempt < retries) {
+                lastErr = new Error(`HTTP ${r.status}`);
+            } else {
+                throw new Error(`HTTP ${r.status}`);
+            }
+        } catch (e) {
+            lastErr = e;
+            if (attempt === retries) throw e;
+        }
+        await new Promise(r => setTimeout(r, retryDelayMs * (attempt + 1)));
+    }
+    throw lastErr;
 }
 
 async function buildGrid() {

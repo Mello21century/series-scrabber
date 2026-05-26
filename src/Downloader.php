@@ -225,19 +225,25 @@ class Downloader
 
         $type = $manifest['type'] ?? 'hls';
         $headers = $this->adapter->cdnHeaders();
+        $url = $type === 'mp4' ? $manifest['sourceUrl'] : $seg['url'];
+        if ($type === 'mp4' && isset($seg['range'])) {
+            $headers[] = 'Range: bytes=' . $seg['range'][0] . '-' . $seg['range'][1];
+        }
 
-        if ($type === 'mp4') {
-            $sourceUrl = $manifest['sourceUrl'];
-            if (isset($seg['range'])) {
-                $headers[] = 'Range: bytes=' . $seg['range'][0] . '-' . $seg['range'][1];
+        $bytes = false;
+        $lastErr = '';
+        $maxAttempts = 4;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $bytes = getCdn($url, $headers);
+            if ($bytes !== false && $bytes !== '') break;
+            $lastErr = 'CDN fetch failed';
+            if ($attempt < $maxAttempts) {
+                usleep((1 << ($attempt - 1)) * 500_000); // 0.5s, 1s, 2s
             }
-            $bytes = getCdn($sourceUrl, $headers);
-        } else {
-            $bytes = getCdn($seg['url'], $headers);
         }
 
         if ($bytes === false || $bytes === '') {
-            return ['ok' => false, 'error' => "segment $segIdx download failed", 'segIdx' => $segIdx, 'total' => $total];
+            return ['ok' => false, 'error' => "segment $segIdx: $lastErr after $maxAttempts attempts", 'segIdx' => $segIdx, 'total' => $total];
         }
         file_put_contents($path, $bytes);
         return ['ok' => true, 'segIdx' => $segIdx, 'total' => $total, 'done' => $segIdx + 1 === $total];
