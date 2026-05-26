@@ -60,6 +60,24 @@ class VidnestAdapter extends SiteAdapter
                     return ['type' => 'hls', 'url' => $reqUrl];
                 }
                 if (str_contains($reqUrl, '/mp4-proxy?url=')) {
+                    // Bypass the worker proxy — fetch upstream MP4 directly with the
+                    // headers the worker would have forwarded.
+                    $q = parse_url($reqUrl, PHP_URL_QUERY) ?? '';
+                    $params = [];
+                    parse_str($q, $params);
+                    $inner = $params['url'] ?? '';
+                    $hdrs = [];
+                    if (!empty($params['headers'])) {
+                        $j = json_decode($params['headers'], true);
+                        if (is_array($j)) {
+                            foreach ($j as $k => $v) {
+                                $hdrs[] = "$k: $v";
+                            }
+                        }
+                    }
+                    if ($inner !== '') {
+                        return ['type' => 'mp4', 'url' => $inner, 'headers' => $hdrs];
+                    }
                     return ['type' => 'mp4', 'url' => $reqUrl];
                 }
             }

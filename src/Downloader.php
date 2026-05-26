@@ -98,7 +98,7 @@ class Downloader
             return ['ok' => false, 'error' => 'no stream source captured'];
         }
 
-        $headers = $this->adapter->cdnHeaders();
+        $headers = !empty($source['headers']) ? $source['headers'] : $this->adapter->cdnHeaders();
 
         if (($source['type'] ?? 'hls') === 'mp4') {
             return $this->prepareMp4($source['url'], $tempDir, $manifestPath, $headers);
@@ -224,7 +224,9 @@ class Downloader
         }
 
         $type = $manifest['type'] ?? 'hls';
-        $headers = $this->adapter->cdnHeaders();
+        $headers = ($type === 'mp4' && !empty($manifest['sourceHeaders']))
+            ? $manifest['sourceHeaders']
+            : $this->adapter->cdnHeaders();
         $url = $type === 'mp4' ? $manifest['sourceUrl'] : $seg['url'];
         if ($type === 'mp4' && isset($seg['range'])) {
             $headers[] = 'Range: bytes=' . $seg['range'][0] . '-' . $seg['range'][1];
@@ -277,6 +279,7 @@ class Downloader
         $manifest = [
             'type' => 'mp4',
             'sourceUrl' => $sourceUrl,
+            'sourceHeaders' => $headers,
             'segments' => $segments,
             'totalSegments' => count($segments),
             'totalBytes' => $size,
