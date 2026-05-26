@@ -36,7 +36,7 @@ if (!function_exists('get')) {
     }
 }
 if (!function_exists('getCdn')) {
-    function getCdn(string $url, array $headers = []): string|false
+    function getCdn(string $url, array $headers = [], ?array &$info = null): string|false
     {
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $url);
@@ -50,8 +50,10 @@ if (!function_exists('getCdn')) {
             curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
         }
         $body = curl_exec($curl);
-        $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $code = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $err = curl_error($curl) ?: null;
         curl_close($curl);
+        $info = ['code' => $code, 'error' => $err, 'bytes' => $body === false ? 0 : strlen($body)];
         if ($body === false || $code < 200 || $code >= 300) {
             return false;
         }

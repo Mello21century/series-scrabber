@@ -231,21 +231,26 @@ class Downloader
         }
 
         $bytes = false;
-        $lastErr = '';
+        $lastInfo = null;
         $maxAttempts = 4;
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            $bytes = getCdn($url, $headers);
+            $bytes = getCdn($url, $headers, $lastInfo);
             if ($bytes !== false && $bytes !== '') break;
-            $lastErr = 'CDN fetch failed';
             if ($attempt < $maxAttempts) {
                 usleep((1 << ($attempt - 1)) * 500_000); // 0.5s, 1s, 2s
             }
         }
 
         if ($bytes === false || $bytes === '') {
-            return ['ok' => false, 'error' => "segment $segIdx: $lastErr after $maxAttempts attempts", 'segIdx' => $segIdx, 'total' => $total];
+            $code = $lastInfo['code'] ?? 0;
+            $err = $lastInfo['error'] ?? 'empty body';
+            return ['ok' => false, 'error' => "segment $segIdx: HTTP $code $err (after $maxAttempts attempts)", 'segIdx' => $segIdx, 'total' => $total];
         }
         file_put_contents($path, $bytes);
+        if (filesize($path) === 0) {
+            @unlink($path);
+            return ['ok' => false, 'error' => "segment $segIdx wrote 0 bytes", 'segIdx' => $segIdx, 'total' => $total];
+        }
         return ['ok' => true, 'segIdx' => $segIdx, 'total' => $total, 'done' => $segIdx + 1 === $total];
     }
 
@@ -341,13 +346,17 @@ class Downloader
         $localPlaylist = "$tempDir/index.m3u8";
         file_put_contents($localPlaylist, implode("\n", $manifest['playlistLines'] ?? []));
 
+        $exitFile = "$tempDir/ffmpeg.exit";
+        @unlink($exitFile);
+        // Wrap ffmpeg so we capture the real exit code in $exitFile.
         $cmd = sprintf(
-            '%s -y -allowed_extensions ALL -i %s -c copy -progress %s %s > %s 2>&1 & echo $!',
+            '( %s -y -allowed_extensions ALL -i %s -c copy -progress %s %s > %s 2>&1; echo $? > %s ) & echo $!',
             escapeshellarg($this->ffmpegBin),
             escapeshellarg($localPlaylist),
             escapeshellarg($progressFile),
             escapeshellarg($outFile),
-            escapeshellarg($logFile)
+            escapeshellarg($logFile),
+            escapeshellarg($exitFile)
         );
         $pid = (int) trim((string) shell_exec($cmd));
         file_put_contents("$tempDir/ffmpeg.pid", (string) $pid);
@@ -399,17 +408,22 @@ class Downloader
     {
         $tempDir = $this->tempDir($season, $ep);
         $progressFile = "$tempDir/ffmpeg.progress";
+        $exitFile = "$tempDir/ffmpeg.exit";
+        $logFile = "$tempDir/ffmpeg.log";
         $manifestPath = "$tempDir/manifest.json";
         $manifest = file_exists($manifestPath)
             ? json_decode((string) file_get_contents($manifestPath), true)
             : [];
         $duration = (float) ($manifest['duration'] ?? 0.0);
         $outFile = $this->outputFile($season, $ep);
+        $isMp4Source = ($manifest['type'] ?? 'hls') === 'mp4';
 
         $percent = 0;
         $done = false;
         $ok = false;
+        $error = null;
 
+        // Live progress from ffmpeg.
         if (file_exists($progressFile)) {
             $contents = (string) file_get_contents($progressFile);
             if ($contents !== '') {
@@ -419,7 +433,8 @@ class Downloader
                 if ($duration > 0) {
                     $percent = (int) min(100, round(($current / $duration) * 100));
                 }
-                if (preg_match('/^progress=end/m', $contents)) {
+                // For MP4 source we wrote progress=end ourselves; respect it.
+                if ($isMp4Source && preg_match('/^progress=end/m', $contents)) {
                     $done = true;
                     $ok = file_exists($outFile) && filesize($outFile) > 0;
                     $percent = $ok ? 100 : $percent;
@@ -427,6 +442,19 @@ class Downloader
             }
         }
 
+        // ffmpeg exit code is the authority for HLS.
+        if (!$done && file_exists($exitFile)) {
+            $exit = (int) trim((string) file_get_contents($exitFile));
+            $done = true;
+            $ok = $exit === 0 && file_exists($outFile) && filesize($outFile) > 0;
+            $percent = $ok ? 100 : $percent;
+            if (!$ok) {
+                $tail = file_exists($logFile) ? $this->tail($logFile, 1000) : '';
+                $error = "ffmpeg exit=$exit" . ($tail ? "\n$tail" : '');
+            }
+        }
+
+        // Fallback: process died with no exit file.
         if (!$done) {
             $pidFile = "$tempDir/ffmpeg.pid";
             if (file_exists($pidFile)) {
@@ -435,15 +463,40 @@ class Downloader
                     $done = true;
                     $ok = file_exists($outFile) && filesize($outFile) > 0;
                     $percent = $ok ? 100 : $percent;
+                    if (!$ok) {
+                        $error = 'ffmpeg died with no exit code';
+                    }
                 }
             }
         }
 
         if ($done && $ok) {
             $this->cleanupTemp($tempDir);
+        } elseif ($done && !$ok) {
+            // Persist the log next to the output dir so we can inspect it.
+            $persisted = sprintf('%s/output/s%02d/ep%02d.ffmpeg.log', $this->projectDir, $season, $ep);
+            if (file_exists($logFile)) {
+                @copy($logFile, $persisted);
+            }
+            // Remove the bad output file so a retry starts clean.
+            if (file_exists($outFile)) @unlink($outFile);
         }
 
-        return ['ok' => $ok, 'done' => $done, 'percent' => $percent];
+        $resp = ['ok' => $ok, 'done' => $done, 'percent' => $percent];
+        if ($error !== null) $resp['error'] = $error;
+        return $resp;
+    }
+
+    private function tail(string $path, int $bytes): string
+    {
+        $size = filesize($path);
+        if ($size === false || $size === 0) return '';
+        $fh = fopen($path, 'rb');
+        if (!$fh) return '';
+        fseek($fh, max(0, $size - $bytes));
+        $buf = stream_get_contents($fh);
+        fclose($fh);
+        return is_string($buf) ? $buf : '';
     }
 
     private function processAlive(int $pid): bool

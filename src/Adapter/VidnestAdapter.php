@@ -20,12 +20,16 @@ class VidnestAdapter extends SiteAdapter
         return [
             'Accept: */*',
             'Accept-Language: en-US,en;q=0.9',
+            'Accept-Encoding: identity;q=1, *;q=0',
             'Origin: https://vidnest.fun',
             'Referer: https://vidnest.fun/',
-            'Sec-Fetch-Dest: empty',
+            'Sec-Fetch-Dest: video',
             'Sec-Fetch-Mode: cors',
             'Sec-Fetch-Site: cross-site',
-            'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+            'Sec-Ch-Ua: "Chromium";v="138", "Not(A:Brand";v="8"',
+            'Sec-Ch-Ua-Mobile: ?0',
+            'Sec-Ch-Ua-Platform: "macOS"',
+            'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
         ];
     }
 
