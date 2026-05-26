@@ -10,6 +10,9 @@ services:
       - selenium
     expose:
       - "80"
+    networks:
+      - default
+      - dokploy-network
     restart: unless-stopped
 
   selenium:
@@ -17,7 +20,13 @@ services:
     shm_size: "2gb"
     expose:
       - "4444"
+    networks:
+      - default
     restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
 
 volumes:
   output:
