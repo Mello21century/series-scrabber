@@ -1,29 +1,24 @@
 services:
   app:
     build: .
-    container_name: popcornfilmz-app
-    ports:
-      - "8080:80"
     environment:
       SELENIUM_HOST: http://selenium:4444/
     volumes:
-      - ./output:/var/www/html/output
-      - ./temp:/var/www/html/temp
+      - output:/var/www/html/output
+      - temp:/var/www/html/temp
     depends_on:
-      selenium:
-        condition: service_healthy
+      - selenium
+    expose:
+      - "80"
     restart: unless-stopped
 
   selenium:
     image: selenium/standalone-chrome:latest
-    container_name: popcornfilmz-selenium
     shm_size: "2gb"
-    ports:
-      - "4444:4444"
-      - "7900:7900"
-    healthcheck:
-      test: ["CMD", "/opt/bin/check-grid.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
+    expose:
+      - "4444"
     restart: unless-stopped
+
+volumes:
+  output:
+  temp:
