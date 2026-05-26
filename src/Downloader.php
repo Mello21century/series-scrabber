@@ -74,7 +74,13 @@ class Downloader
 
         if (file_exists($manifestPath)) {
             $existing = json_decode((string) file_get_contents($manifestPath), true);
-            if (is_array($existing) && !empty($existing['segments'])) {
+            // Reuse only if it's an HLS manifest (segment URLs are stable) or an MP4
+            // manifest that already has source headers (post-fix). Old MP4 manifests
+            // pointed at the worker proxy without headers — regenerate those.
+            $reusable = is_array($existing)
+                && !empty($existing['segments'])
+                && (($existing['type'] ?? 'hls') !== 'mp4' || !empty($existing['sourceHeaders']));
+            if ($reusable) {
                 return ['ok' => true, 'manifest' => $existing, 'cached' => true];
             }
         }
