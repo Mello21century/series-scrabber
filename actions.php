@@ -64,6 +64,11 @@ try {
             echo json_encode($downloader->ffmpegStatus($season, $ep));
             break;
 
+        case 'delete':
+            if (!$season || !$ep) fail('s and e required');
+            echo json_encode(['ok' => $downloader->delete($season, $ep)]);
+            break;
+
         default:
             fail("unknown action: $action", 404);
     }

@@ -6,6 +6,11 @@
 <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
+<div class="nav" style="display:flex;gap:12px;margin-bottom:12px;font-size:12px">
+    <a href="index.php?seriesId=<?= htmlspecialchars($_GET['seriesId'] ?? '155') ?>" style="color:#fff;text-decoration:none;padding:4px 10px;border:1px solid #3a86ff;border-radius:3px">Scraper</a>
+    <a href="library.php?seriesId=<?= htmlspecialchars($_GET['seriesId'] ?? '155') ?>" style="color:#98a2ad;text-decoration:none;padding:4px 10px;border:1px solid #2a3038;border-radius:3px">Library →</a>
+</div>
+
 <h1>vidnest.fun → mp4 scraper</h1>
 
 <div class="controls">

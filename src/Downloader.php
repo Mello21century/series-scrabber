@@ -47,6 +47,48 @@ class Downloader
         return file_exists($this->outputFile($season, $ep));
     }
 
+    public function delete(int $season, int $ep): bool
+    {
+        $out = $this->outputFile($season, $ep);
+        $logFile = sprintf('%s/output/s%02d/ep%02d.ffmpeg.log', $this->projectDir, $season, $ep);
+        $temp = $this->tempDir($season, $ep);
+        if (file_exists($out)) @unlink($out);
+        if (file_exists($logFile)) @unlink($logFile);
+        if (is_dir($temp)) {
+            foreach (glob("$temp/*") as $f) @unlink($f);
+            @rmdir($temp);
+        }
+        return !file_exists($out);
+    }
+
+    /**
+     * Scan output/ and return downloaded episodes grouped by season.
+     * @return array<int, list<array{ep:int, size:int, mtime:int, path:string}>>
+     */
+    public function listDownloads(): array
+    {
+        $root = $this->projectDir . '/output';
+        $out = [];
+        if (!is_dir($root)) return $out;
+        foreach (glob($root . '/s*/ep*.mp4') as $path) {
+            if (preg_match('#/s(\d+)/ep(\d+)\.mp4$#', $path, $m)) {
+                $season = (int) $m[1];
+                $ep = (int) $m[2];
+                $out[$season][] = [
+                    'ep' => $ep,
+                    'size' => filesize($path) ?: 0,
+                    'mtime' => filemtime($path) ?: 0,
+                    'path' => 'output/' . substr($path, strlen($root) + 1),
+                ];
+            }
+        }
+        ksort($out);
+        foreach ($out as &$list) {
+            usort($list, fn($a, $b) => $a['ep'] <=> $b['ep']);
+        }
+        return $out;
+    }
+
     public function createDriver(): RemoteWebDriver
     {
         $capabilities = DesiredCapabilities::chrome();
